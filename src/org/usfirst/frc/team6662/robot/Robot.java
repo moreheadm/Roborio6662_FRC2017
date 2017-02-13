@@ -6,7 +6,11 @@ import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.PowerDistributionPanel;
 import edu.wpi.first.wpilibj.RobotDrive;
+import edu.wpi.first.wpilibj.Victor;
+import edu.wpi.first.wpilibj.interfaces.Gyro;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj.CameraServer;
+import edu.wpi.first.wpilibj.ADXRS450_Gyro;
 
 public class Robot extends IterativeRobot {
 	RobotDrive driveTrain = new RobotDrive(0, 1, 2, 3);
@@ -14,10 +18,14 @@ public class Robot extends IterativeRobot {
 	PowerDistributionPanel pdp = new PowerDistributionPanel();
 	Compressor compressor = new Compressor(0);
 	DoubleSolenoid solenoid = new DoubleSolenoid(0, 1);
+	Victor liftMotor = new Victor(4);
+	Gyro gyro;
 	
 	@Override
 	public void robotInit() {
-		compressor.setClosedLoopControl(true);
+		gyro = new ADXRS450_Gyro();
+	  	compressor.setClosedLoopControl(true);
+	//	CameraServer.getInstance().startAutomaticCapture();
 	}
 	
 	@Override
@@ -27,31 +35,62 @@ public class Robot extends IterativeRobot {
 	@Override
 	public void autonomousPeriodic() {
 	}
+	
+	@Override
+	public void teleopInit() {
+		gyro.calibrate();
+	}
 
 	@Override
 	public void teleopPeriodic() {
-		boolean trigger = joystick.getRawButton(1);
+		boolean trigger        = joystick.getRawButton(1),
+				overrideButton = joystick.getRawButton(9),
+				stopButton     = joystick.getRawButton(10),
+				modeButton     = joystick.getRawButton(11);
 		
-		double rotate = joystick.getX();
+		double rotate = joystick.getX(),
+				angle = gyro.getAngle();
 		
-		double motorCurrent0 = pdp.getCurrent(0),
-			   motorCurrent1 = pdp.getCurrent(1),
-			   motorCurrent2 = pdp.getCurrent(14),
-			   motorCurrent3 = pdp.getCurrent(15);
+		double throttle = joystick.getThrottle();
+		
+		double motor0Current    = pdp.getCurrent(0),
+			   motor1Current    = pdp.getCurrent(1),
+			   motor2Current    = pdp.getCurrent(14),
+			   motor3Current    = pdp.getCurrent(15),
+			   liftMotorCurrent = pdp.getCurrent(6);
 		
 		double compressorCurrent = compressor.getCompressorCurrent();
 		
-		/** SMARTDASHBOARD **/
+		final double safeLiftCurrent = 35;
 		
-		SmartDashboard.putNumber("Motor 0 Current", motorCurrent0);
-		SmartDashboard.putNumber("Motor 1 Current", motorCurrent1);
-		SmartDashboard.putNumber("Motor 2 Current", motorCurrent2);
-		SmartDashboard.putNumber("Motor 3 Current", motorCurrent3);
+		boolean gameDrive         = false,
+				liftMotorShutoff  = false,
+				liftMotorOverride = false,
+				stopLift          = false;
+		
+		/******** SMARTDASHBOARD ********/
+		
+		/** MOTORS **/
+		
+		SmartDashboard.putNumber("Motor 0 Current", motor0Current);
+		SmartDashboard.putNumber("Motor 1 Current", motor1Current);
+		SmartDashboard.putNumber("Motor 2 Current", motor2Current);
+		SmartDashboard.putNumber("Motor 3 Current", motor3Current);
+		
+		SmartDashboard.putNumber("Lift Motor Current", liftMotorCurrent);
+		
+		/** PNEUMATICS **/
 		
 		SmartDashboard.putNumber("Compressor Current", compressorCurrent);
 		
-		/** CONTROLLER **/
+		/** GYROSCOPE **/
 		
+		SmartDashboard.putNumber("Gyroscope Angle", angle);
+		
+		/******** CONTROLS ********/
+		
+		/** PNEUMATICS **/
+		SmartDashboard.putBoolean("Gearage Open", trigger );
 		if (trigger) {
 			solenoid.set(DoubleSolenoid.Value.kForward);
 		}
@@ -59,11 +98,37 @@ public class Robot extends IterativeRobot {
 			solenoid.set(DoubleSolenoid.Value.kReverse);
 		}
 		
-		if (joystick.getY() <= 0) {
-			rotate = -rotate;
+		/** LIFT **/
+		
+		if(stopButton) {
+			stopLift = !stopLift;
 		}
 		
-		driveTrain.arcadeDrive(-joystick.getY(), rotate);
+		if(overrideButton) {
+			liftMotorOverride = true;
+		}
+		
+		if((!liftMotorShutoff || liftMotorOverride) && !stopLift) {
+			liftMotor.set(throttle);
+		}
+		
+		if(liftMotorCurrent > safeLiftCurrent) {
+			liftMotorShutoff = true;
+		}
+		
+		/** DRIVE **/
+		
+		if(modeButton) {
+			gameDrive = gameDrive ? false : true;
+		}
+		
+		if(gameDrive) {
+			if (joystick.getY() <= 0) {
+				rotate = -rotate;
+			}
+		}
+		
+		driveTrain.arcadeDrive(joystick.getY(), rotate);
 	}
 
 	@Override
