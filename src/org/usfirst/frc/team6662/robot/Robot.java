@@ -59,8 +59,9 @@ public class Robot extends IterativeRobot {
 			solenoid.set(DoubleSolenoid.Value.kReverse);
 		}
 		
-		if (joystick.getY() <= 0)
+		if (joystick.getY() <= 0) {
 			rotate = -rotate;
+		}
 		
 		driveTrain.arcadeDrive(-joystick.getY(), rotate);
 	}
