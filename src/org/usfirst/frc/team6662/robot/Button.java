@@ -20,7 +20,7 @@ public class Button {
 		boolean changed = pressed != this.pressed;
 		this.pressed = pressed;
 		
-		if (changed) {
+		if (changed && this.pressed) {
 			on = !on;
 		}
 		
