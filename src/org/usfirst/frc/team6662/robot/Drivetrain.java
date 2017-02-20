@@ -26,8 +26,8 @@ public class Drivetrain {
 		this.shifter = shifter;
 		
 		
-		this.rightEncoder.setDistancePerPulse(0.5 * Math.PI * 3.0);
-		this.leftEncoder.setDistancePerPulse(0.5 * Math.PI * 3.0);
+		this.rightEncoder.setDistancePerPulse(0.5 * Math.PI * 3.0 / 12.0);
+		this.leftEncoder.setDistancePerPulse(0.5 * Math.PI * 3.0 / 12.0);
 		
 		//automatic = true;
 		shiftState = LOW_GEAR;
