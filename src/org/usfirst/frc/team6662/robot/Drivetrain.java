@@ -7,8 +7,8 @@ import edu.wpi.first.wpilibj.RobotDrive;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 public class Drivetrain {
-	private final double MAX_LOW_SPEED = 6.56, MAX_HIGH_SPEED = 17.89,
-						UPSHIFT_THRESH = 5.00, DOWNSHIFT_THRESH = 8.00;
+	private final double MAX_LOW_SPEED = 8.00, MAX_HIGH_SPEED = 16.00,
+						UPSHIFT_THRESH = 5.00, DOWNSHIFT_THRESH = 10.00;
 	private final boolean HIGH_GEAR = true;
 	private final boolean LOW_GEAR = false;
 	
@@ -26,31 +26,33 @@ public class Drivetrain {
 		this.shifter = shifter;
 		
 		
-		this.rightEncoder.setDistancePerPulse(0.5 * Math.PI * 3.0 / 12.0);
-		this.leftEncoder.setDistancePerPulse(0.5 * Math.PI * 3.0 / 12.0);
+		this.rightEncoder.setDistancePerPulse(- 6. * Math.PI * 3.0 / 12.0 / 360.);
+		this.leftEncoder.setDistancePerPulse(6. * Math.PI * 3.0 / 12.0 / 360.);
+		this.rightEncoder.setSamplesToAverage(7);
+		this.leftEncoder.setSamplesToAverage(7);
 		
 		//automatic = true;
 		shiftState = LOW_GEAR;
-		shifter.set(DoubleSolenoid.Value.kReverse);
+		shifter.set(DoubleSolenoid.Value.kForward);
 	}
 	
-	private void shift() {
+	public void shift() {
 		if (shiftState == HIGH_GEAR) {
-			shifter.set(DoubleSolenoid.Value.kReverse);
+			shifter.set(DoubleSolenoid.Value.kForward);
 			shiftState = LOW_GEAR;
 		} else {
-			shifter.set(DoubleSolenoid.Value.kForward);
+			shifter.set(DoubleSolenoid.Value.kReverse);
 			shiftState = HIGH_GEAR;
 		}
 	}
 	
-	private void shiftHigh () {
-		shifter.set(DoubleSolenoid.Value.kForward);
+	public void shiftHigh () {
+		shifter.set(DoubleSolenoid.Value.kReverse);
 		shiftState = HIGH_GEAR;
 	}
 	
-	private void shiftLow () {
-		shifter.set(DoubleSolenoid.Value.kReverse);
+	public void shiftLow () {
+		shifter.set(DoubleSolenoid.Value.kForward);
 		shiftState = LOW_GEAR;
 	}
 	
@@ -67,34 +69,60 @@ public class Drivetrain {
 	}
 	
 	public void manualDrivetrain (Joystick joystick, Button shiftButton) {
+		double leftSpeed = leftEncoder.getRate();
+		double rightSpeed = rightEncoder.getRate();
+		double speed = (leftSpeed + rightSpeed) / 2.0;
+		SmartDashboard.putNumber("Left Wheel Speed", leftSpeed);
+		SmartDashboard.putNumber("Right Wheel Speed", rightSpeed);
+		SmartDashboard.putNumber("Speed", speed);
+		
 		if (shiftButton.isOn()) {
 			shiftHigh();
 		} else {
 			shiftLow();
 		}
 		
-		dt.arcadeDrive(joystick);
+		dt.arcadeDrive(-joystick.getY(), -joystick.getZ());
 	}
 	
+	public double getLeftDistance () {
+		return leftEncoder.getDistance();
+	}
+	
+	public double getRightDistance () {
+		return rightEncoder.getDistance();
+	}
+	
+	public void drive (double magnitude, double curve) {
+		dt.drive(magnitude, curve);
+	}
+	
+	double pow1, pow2;
 	public void automaticDrivetrain (Joystick joystick) {
 		double leftSpeed = leftEncoder.getRate();
 		double rightSpeed = rightEncoder.getRate();
-		double speed = (leftSpeed + rightSpeed) / 2.0; // TODO: Maybe this can be improved
+		//double speed = Math.abs((leftSpeed + rightSpeed) / 2.0); // TODO: Maybe this can be improved
 		
+		
+		
+		double speed = Math.abs((pow1 + pow2) / (2. * Math.max(Math.abs(pow1), Math.abs(pow2)))) * leftSpeed;
 		SmartDashboard.putNumber("Left Wheel Speed", leftSpeed);
 		SmartDashboard.putNumber("Right Wheel Speed", rightSpeed);
 		SmartDashboard.putNumber("Speed", speed);
 		
 
-		double jsY = joystick.getY(), jsX = joystick.getX();
+		//joystick x, y is reversed
+		double jsY = -joystick.getY(), jsX = -joystick.getZ();
 
 		
 		//squared input target speed
 		double targetSpeed = MAX_HIGH_SPEED * (jsY * jsY - jsX * jsX);
 		
-		
-		
-		if (targetSpeed > MAX_LOW_SPEED) {
+		SmartDashboard.putNumber("targetSpeed", targetSpeed);
+
+		if (Math.abs(jsX) > 0.15) {
+			shiftLow();
+		} else if (targetSpeed > MAX_LOW_SPEED) {
 			if (targetSpeed > DOWNSHIFT_THRESH) {
 				if (speed > UPSHIFT_THRESH) {
 					shiftHigh();
@@ -111,10 +139,50 @@ public class Drivetrain {
 		}
 		
 		if (shiftState == HIGH_GEAR) {
+			/*double rotate;
+			if (jsX >= 0.0) {
+				rotate = jsX * jsX;
+			} else {
+				rotate = - jsX * jsX;
+			}*/
 			dt.arcadeDrive(jsY, jsX);
 		} else {
 			dt.arcadeDrive(jsY * Math.sqrt(MAX_HIGH_SPEED / MAX_LOW_SPEED), 
-					jsX * jsX);
+					jsX);
 		}
+		
+		double moveValue = jsY;
+		double rotateValue = jsX;
+		
+	   	if (moveValue >= 0.0) {
+	        moveValue = moveValue * moveValue;
+	      } else {
+	        moveValue = -(moveValue * moveValue);
+	      }
+	    if (rotateValue >= 0.0) {
+	      rotateValue = rotateValue * rotateValue;
+	      } else {
+	        rotateValue = -(rotateValue * rotateValue);
+	      }
+	    
+
+	    if (moveValue > 0.0) {
+	      if (rotateValue > 0.0) {
+	        pow1 = moveValue - rotateValue;
+	        pow2 = Math.max(moveValue, rotateValue);
+	      } else {
+	        pow1 = Math.max(moveValue, -rotateValue);
+	        pow2 = moveValue + rotateValue;
+	      }
+	    } else {
+	      if (rotateValue > 0.0) {
+	        pow1 = -Math.max(-moveValue, rotateValue);
+	        pow2 = moveValue + rotateValue;
+	      } else {
+	        pow1 = moveValue - rotateValue;
+	        pow2 = -Math.max(-moveValue, -rotateValue);
+	      }
+	    }
 	}
+	
 }
